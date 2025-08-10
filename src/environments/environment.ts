@@ -1,4 +1,4 @@
 export const environment = {
-  production: false,
+  production: true,
   apiUrl: 'https://chatsapp-backend-hom7.onrender.com/api',
 };

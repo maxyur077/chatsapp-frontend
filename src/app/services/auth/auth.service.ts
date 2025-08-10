@@ -77,7 +77,10 @@ export class AuthService {
     );
     return new Observable((observer) => {
       this.http
-        .post<AuthResponse>(`${environment.apiUrl}/users/register`, userData)
+        .post<AuthResponse>(
+          `https://chatsapp-backend-hom7.onrender.com/api/users/register`,
+          userData
+        )
         .subscribe({
           next: (response) => {
             if (response.success) {

@@ -8,7 +8,7 @@ import { environment } from '../../../environments/environment';
 })
 export class ChatService {
   private http = inject(HttpClient);
-  private apiUrl = environment.apiUrl;
+  private apiUrl = 'https://chatsapp-backend-hom7.onrender.com/api';
   private currentChatSubject = new BehaviorSubject<string | null>(null);
   public currentChat$ = this.currentChatSubject.asObservable();
 
