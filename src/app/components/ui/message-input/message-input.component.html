@@ -1,0 +1,85 @@
+<div class="bg-white p-4 border-t border-ChatsApp-border">
+  <div class="flex items-end space-x-3">
+    <!-- Emoji button -->
+    <button
+      class="p-2 hover:bg-gray-200 rounded-full transition-colors flex-shrink-0"
+      type="button"
+    >
+      <svg
+        class="w-6 h-6 text-gray-600"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M14.828 14.828a4 4 0 01-5.656 0M9 10h1m4 0h1m-6 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+        ></path>
+      </svg>
+    </button>
+
+    <!-- Message input -->
+    <div class="flex-1 relative">
+      <textarea
+        #messageInput
+        [(ngModel)]="messageText"
+        (keypress)="onKeyPress($event)"
+        (input)="onInput($event)"
+        placeholder="Type a message"
+        rows="1"
+        class="w-full px-4 py-2 pr-12 bg-gray-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-ChatsApp-primary focus:bg-white resize-none overflow-hidden min-h-[40px] max-h-[120px]"
+        [disabled]="disabled"
+        style="line-height: 1.5"
+      ></textarea>
+
+      <!-- Attach button -->
+      <button
+        type="button"
+        class="absolute right-2 top-1/2 transform -translate-y-1/2 p-1 hover:bg-gray-200 rounded-full transition-colors"
+      >
+        <svg
+          class="w-5 h-5 text-gray-600"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
+          ></path>
+        </svg>
+      </button>
+    </div>
+
+    <!-- Send button -->
+    <button
+      (click)="sendMessage()"
+      [disabled]="!messageText.trim() || disabled"
+      class="p-2 bg-ChatsApp-primary text-white rounded-full hover:bg-ChatsApp-secondary disabled:opacity-50 disabled:cursor-not-allowed transition-colors flex-shrink-0"
+    >
+      <svg
+        *ngIf="!disabled"
+        class="w-6 h-6"
+        fill="none"
+        stroke="currentColor"
+        viewBox="0 0 24 24"
+      >
+        <path
+          stroke-linecap="round"
+          stroke-linejoin="round"
+          stroke-width="2"
+          d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+        ></path>
+      </svg>
+
+      <div
+        *ngIf="disabled"
+        class="w-6 h-6 border-2 border-white border-t-transparent rounded-full animate-spin"
+      ></div>
+    </button>
+  </div>
+</div>

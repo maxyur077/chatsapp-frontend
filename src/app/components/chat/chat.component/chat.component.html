@@ -1,0 +1,268 @@
+<div class="h-screen bg-gray-100 flex" *ngIf="selectedUser()">
+  <!-- Chat Header -->
+  <div class="w-full flex flex-col">
+    <div
+      class="bg-gray-50 border-b border-gray-200 px-4 py-3 flex items-center space-x-3"
+    >
+      <!-- Back Button -->
+      <button
+        (click)="goBack()"
+        class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded-full lg:hidden"
+      >
+        <svg
+          class="w-5 h-5"
+          fill="none"
+          stroke="currentColor"
+          viewBox="0 0 24 24"
+        >
+          <path
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            stroke-width="2"
+            d="M15 19l-7-7 7-7"
+          ></path>
+        </svg>
+      </button>
+
+      <!-- User Avatar -->
+      <div class="relative">
+        <div
+          class="w-10 h-10 bg-gray-400 rounded-full flex items-center justify-center"
+        >
+          <span class="text-white font-semibold text-sm">
+            {{ getInitials(selectedUser()!.name) }}
+          </span>
+        </div>
+        <!-- Online Status Indicator -->
+        <div
+          *ngIf="selectedUser()!.isOnline"
+          class="absolute -bottom-0.5 -right-0.5 w-3 h-3 bg-green-500 border-2 border-white rounded-full"
+        ></div>
+      </div>
+
+      <!-- User Info -->
+      <div class="flex-1">
+        <h3 class="font-medium text-gray-900">{{ selectedUser()!.name }}</h3>
+        <p class="text-sm text-gray-500">
+          {{ getLastSeenText(selectedUser()!) }}
+        </p>
+      </div>
+
+      <!-- Actions -->
+      <div class="flex items-center space-x-2">
+        <button
+          class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded-full"
+        >
+          <svg
+            class="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z"
+            ></path>
+          </svg>
+        </button>
+        <button
+          class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded-full"
+        >
+          <svg
+            class="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M5 12h.01M12 12h.01M19 12h.01M6 12a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0zm7 0a1 1 0 11-2 0 1 1 0 012 0z"
+            ></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+
+    <!-- Messages Area -->
+    <div #messagesContainer class="flex-1 overflow-y-auto p-4 space-y-4">
+      <div
+        *ngFor="let message of messages()"
+        [class]="
+          message.senderId === currentUser()?.id
+            ? 'flex justify-end'
+            : 'flex justify-start'
+        "
+      >
+        <div
+          [class]="
+            message.senderId === currentUser()?.id
+              ? 'bg-green-500 text-white px-4 py-2 rounded-lg max-w-xs lg:max-w-md'
+              : 'bg-white text-gray-900 px-4 py-2 rounded-lg shadow-sm max-w-xs lg:max-w-md'
+          "
+        >
+          <p class="text-sm">{{ message.content }}</p>
+
+          <div
+            [class]="
+              message.senderId === currentUser()?.id
+                ? 'flex items-center justify-end space-x-1 mt-1'
+                : 'flex items-center justify-end space-x-1 mt-1'
+            "
+          >
+            <span
+              [class]="
+                message.senderId === currentUser()?.id
+                  ? 'text-xs text-green-100'
+                  : 'text-xs text-gray-500'
+              "
+            >
+              {{ formatMessageTime(message.timestamp) }}
+            </span>
+
+            <!-- Message Status (only for sent messages) -->
+            <div *ngIf="message.senderId === currentUser()?.id" class="flex">
+              <!-- Single tick for sent -->
+              <svg
+                *ngIf="message.status === 'sent'"
+                class="w-4 h-4 text-green-200"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                  clip-rule="evenodd"
+                ></path>
+              </svg>
+
+              <!-- Double tick for delivered -->
+              <svg
+                *ngIf="message.status === 'delivered'"
+                class="w-4 h-4 text-green-200"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                  clip-rule="evenodd"
+                ></path>
+              </svg>
+              <svg
+                *ngIf="message.status === 'delivered'"
+                class="w-4 h-4 text-green-200 -ml-2"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                  clip-rule="evenodd"
+                ></path>
+              </svg>
+
+              <!-- Blue double tick for read -->
+              <svg
+                *ngIf="message.status === 'read'"
+                class="w-4 h-4 text-blue-300"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                  clip-rule="evenodd"
+                ></path>
+              </svg>
+              <svg
+                *ngIf="message.status === 'read'"
+                class="w-4 h-4 text-blue-300 -ml-2"
+                fill="currentColor"
+                viewBox="0 0 20 20"
+              >
+                <path
+                  fill-rule="evenodd"
+                  d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                  clip-rule="evenodd"
+                ></path>
+              </svg>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Typing Indicator -->
+      <div *ngIf="userTyping()" class="flex justify-start">
+        <div class="bg-white text-gray-900 px-4 py-2 rounded-lg shadow-sm">
+          <div class="flex items-center space-x-1">
+            <div class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
+            <div
+              class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+              style="animation-delay: 0.1s"
+            ></div>
+            <div
+              class="w-2 h-2 bg-gray-400 rounded-full animate-bounce"
+              style="animation-delay: 0.2s"
+            ></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Message Input -->
+    <div class="border-t border-gray-200 bg-white px-4 py-3">
+      <div class="flex items-center space-x-3">
+        <button class="p-2 text-gray-500 hover:text-gray-700">
+          <svg
+            class="w-6 h-6"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13"
+            ></path>
+          </svg>
+        </button>
+
+        <div class="flex-1 relative">
+          <input
+            type="text"
+            [(ngModel)]="newMessage"
+            (input)="onTyping()"
+            (keydown.enter)="sendMessage()"
+            placeholder="Type a message..."
+            class="w-full px-4 py-2 bg-gray-100 border-0 rounded-full focus:outline-none focus:bg-white focus:ring-1 focus:ring-green-500"
+          />
+        </div>
+
+        <button
+          (click)="sendMessage()"
+          [disabled]="!newMessage().trim()"
+          class="p-2 bg-green-500 text-white rounded-full hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
+        >
+          <svg
+            class="w-5 h-5"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
+            ></path>
+          </svg>
+        </button>
+      </div>
+    </div>
+  </div>
+</div>

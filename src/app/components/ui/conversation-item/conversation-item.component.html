@@ -1,0 +1,53 @@
+<div
+  (click)="onConversationClick()"
+  class="flex items-center p-3 hover:bg-gray-100 cursor-pointer border-b border-gray-100 transition-colors duration-150"
+  [class.bg-gray-100]="isSelected"
+>
+  <!-- Avatar -->
+  <div
+    class="flex-shrink-0 w-12 h-12 bg-gray-300 rounded-full flex items-center justify-center text-white font-semibold"
+  >
+    {{ getInitials() }}
+  </div>
+
+  <!-- Conversation Info -->
+  <div class="ml-3 flex-1 min-w-0">
+    <div class="flex items-center justify-between">
+      <h3 class="text-sm font-semibold text-gray-900 truncate">
+        {{ conversation.contact_name || conversation.wa_id }}
+      </h3>
+      <span class="text-xs text-gray-500 ml-2 flex-shrink-0">
+        {{
+          conversation.last_message && conversation.last_message.timestamp
+            ? formatTime(conversation.last_message.timestamp)
+            : ""
+        }}
+      </span>
+    </div>
+
+    <div class="flex items-center justify-between mt-1">
+      <p class="text-sm text-gray-600 truncate flex-1">
+        <span
+          *ngIf="
+            conversation.last_message &&
+            conversation.last_message.direction === 'outbound'
+          "
+          class="text-blue-500 mr-1"
+          >You:</span
+        >
+        {{
+          conversation.last_message && conversation.last_message.content
+            ? conversation.last_message.content
+            : "No messages yet"
+        }}
+      </p>
+
+      <div
+        *ngIf="conversation.unread_count > 0"
+        class="bg-green-600 text-white text-xs rounded-full px-2 py-1 min-w-[20px] flex items-center justify-center ml-2"
+      >
+        {{ conversation.unread_count > 99 ? "99+" : conversation.unread_count }}
+      </div>
+    </div>
+  </div>
+</div>
