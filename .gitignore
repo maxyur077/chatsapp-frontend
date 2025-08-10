@@ -36,7 +36,35 @@ yarn-error.log
 /libpeerconnection.log
 testem.log
 /typings
-environments/
+
 # System files
 .DS_Store
 Thumbs.db
+
+# Environment files (only local overrides)
+/src/environments/environment.local.ts
+.env
+.env.local
+.env.*.local
+
+# Logs
+logs
+*.log
+
+# Runtime data
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# Optional npm cache directory
+.npm
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity

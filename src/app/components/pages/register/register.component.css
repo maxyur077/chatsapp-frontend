@@ -1,7 +1,4 @@
 /* Additional styles for better visual feedback */
-.form-group {
-  @apply mb-4;
-}
 
 .input-field {
   @apply w-full px-4 py-3 pl-10 bg-gray-50 border border-gray-200 rounded-xl;
