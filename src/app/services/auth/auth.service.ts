@@ -71,6 +71,10 @@ export class AuthService {
     phone: string;
     password: string;
   }): Observable<AuthResponse> {
+    console.log(
+      environment.apiUrl,
+      'https://chatsapp-backend-hom7.onrender.com/api'
+    );
     return new Observable((observer) => {
       this.http
         .post<AuthResponse>(`${environment.apiUrl}/users/register`, userData)
