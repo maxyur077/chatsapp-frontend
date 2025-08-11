@@ -1,59 +1,80 @@
-# ChatsAppFrontend
+# 🚀 ChatsApp Frontend
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 20.1.3.
+A modern, real-time chat application built with Angular 20, featuring WhatsApp-like functionality with Socket.IO integration for instant messaging.
 
-## Development server
+![Angular](https://img.shields.io/badge/Angular-20.1.3-red?style=flat-square&logo=angular)
+![TypeScript](https://img.shields.io/badge/TypeScript-Latest-blue?style=flat-square&logo=typescript)
+![Socket.IO](https://img.shields.io/badge/Socket.IO-Client-black?style=flat-square&logo=socket.io)
+![TailwindCSS](https://img.shields.io/badge/TailwindCSS-Latest-38B2AC?style=flat-square&logo=tailwind-css)
 
-To start a local development server, run:
+## ✨ Features
 
-```bash
+### 🔥 Real-time Messaging
+- **Instant messaging** with Socket.IO integration
+- **Message delivery confirmations** (sent, delivered, read)
+- **Optimistic UI** for immediate message display
+- **Fallback to API** when socket connection is unavailable
+
+### 👥 User Management
+- **Real-time online/offline status** tracking
+- **WhatsApp-like user sorting** (unread messages first, then online users)
+- **User search and filtering**
+- **Avatar generation** with custom colors
+
+### 💬 Chat Features
+- **Message highlighting** for new unread messages
+- **Smart notification system** (no highlights when actively chatting)
+- **Message timestamps** with relative time display
+- **Mobile-responsive design** with touch-friendly interface
+
+### 🔐 Authentication & Security
+- **JWT-based authentication**
+- **Protected routes** with auth guards
+- **Automatic token refresh**
+- **Secure API communication**
+
+## 🛠️ Tech Stack
+
+- **Frontend**: Angular 20.1.3 with Standalone Components
+- **Real-time**: Socket.IO Client
+- **Styling**: TailwindCSS
+- **State Management**: Angular Signals
+- **HTTP Client**: Angular HttpClient with Interceptors
+- **Routing**: Angular Router with Guards
+
+## 🚀 Quick Start
+
+### Prerequisites
+
+- Node.js (v18+ recommended)
+- npm or yarn
+- Angular CLI 20.1.3+
+
+### Installation
+
+1. **Clone the repository**
+git clone <your-repo-url>
+cd ChatsAppFrontend
+
+
+2. **Install dependencies**
+npm install
+
+
+3. **Configure environment**
+
+//src/environments/environment.ts
+export const environment = {
+production: false,
+apiUrl: 'http://localhost:3000/api',
+socketUrl: 'http://localhost:3000'
+};
+
+
+4. **Start development server**
 ng serve
-```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
 
-## Code scaffolding
+5. **Open your browser**
+Navigate to `http://localhost:4200/`
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
-
-```bash
-ng generate component component-name
-```
-
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
-
-```bash
-ng generate --help
-```
-
-## Building
-
-To build the project run:
-
-```bash
-ng build
-```
-
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
-
-## Running unit tests
-
-To execute unit tests with the [Karma](https://karma-runner.github.io) test runner, use the following command:
-
-```bash
-ng test
-```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
