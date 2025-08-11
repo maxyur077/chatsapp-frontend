@@ -7,6 +7,7 @@ import {
   ViewChild,
   ElementRef,
   AfterViewChecked,
+  HostListener,
 } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { FormsModule } from '@angular/forms';
@@ -30,6 +31,9 @@ interface Message {
 interface UserWithNotification extends User {
   hasUnreadMessage?: boolean;
   lastMessageTime?: Date;
+  lastMessage?: string;
+  unreadCount?: number;
+  sortPriority?: number;
 }
 
 @Component({
@@ -48,7 +52,6 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
   private socketService = inject(SocketService);
   private router = inject(Router);
 
-  // Signals for reactive state
   users = signal<UserWithNotification[]>([]);
   filteredUsers = signal<UserWithNotification[]>([]);
   loading = signal(true);
@@ -56,16 +59,21 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
   searchQuery = signal('');
   currentUser = signal<any>(null);
 
-  // Chat signals
   selectedUser = signal<UserWithNotification | null>(null);
   messages = signal<Message[]>([]);
   newMessage = signal('');
   sendingMessage = signal(false);
   loadingMessages = signal(false);
 
-  // Subscriptions
+  isMobileView = signal(false);
+
   private refreshSubscription?: Subscription;
   private socketSubscription?: Subscription;
+
+  @HostListener('window:resize', ['$event'])
+  onResize(event: any) {
+    this.checkMobileView();
+  }
 
   ngOnInit() {
     this.currentUser.set(this.authService.getCurrentUser());
@@ -75,45 +83,9 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
       return;
     }
 
+    this.checkMobileView();
     this.loadUsers();
-
-    // Connect to WebSocket
-    this.socketService.connect();
-
-    // Listen for new messages with notification highlighting
-    this.socketSubscription = this.socketService
-      .getNewMessages()
-      .subscribe((newMessages) => {
-        newMessages.forEach((socketMessage) => {
-          // Add message to current conversation if it's the selected user
-          const selectedUser = this.selectedUser();
-          if (
-            selectedUser &&
-            (socketMessage.from === selectedUser.username ||
-              socketMessage.to === selectedUser.username)
-          ) {
-            const message: Message = {
-              id: socketMessage.id,
-              from: socketMessage.from,
-              to: socketMessage.to,
-              content:
-                typeof socketMessage.content === 'string'
-                  ? socketMessage.content
-                  : JSON.stringify(socketMessage.content),
-              timestamp: new Date(socketMessage.timestamp),
-              status: socketMessage.status as 'sent' | 'delivered' | 'read',
-              senderName: socketMessage.senderName,
-            };
-
-            this.messages.update((messages) => [...messages, message]);
-          }
-
-          // Highlight user in chat list when message arrives
-          if (socketMessage.from !== this.currentUser()?.username) {
-            this.highlightUserWithNewMessage(socketMessage.from);
-          }
-        });
-      });
+    this.initializeSocket();
 
     this.refreshSubscription = interval(30000).subscribe(() => {
       this.loadUsers(false);
@@ -133,6 +105,85 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.scrollToBottom();
   }
 
+  private checkMobileView() {
+    this.isMobileView.set(window.innerWidth < 768);
+  }
+
+  private initializeSocket() {
+    this.socketService.connect();
+
+    this.socketSubscription = this.socketService
+      .getNewMessages()
+      .subscribe((newMessages) => {
+        newMessages.forEach((socketMessage) => {
+          this.handleIncomingMessage(socketMessage);
+        });
+      });
+  }
+
+  private handleIncomingMessage(socketMessage: any) {
+    const selectedUser = this.selectedUser();
+
+    if (
+      selectedUser &&
+      (socketMessage.from === selectedUser.username ||
+        socketMessage.to === selectedUser.username)
+    ) {
+      const message: Message = {
+        id: socketMessage.id || Date.now().toString(),
+        from: socketMessage.from,
+        to: socketMessage.to,
+        content:
+          typeof socketMessage.content === 'string'
+            ? socketMessage.content
+            : JSON.stringify(socketMessage.content),
+        timestamp: new Date(socketMessage.timestamp || Date.now()),
+        status: socketMessage.status as 'sent' | 'delivered' | 'read',
+        senderName: socketMessage.senderName || socketMessage.from,
+      };
+
+      this.messages.update((messages) => {
+        const exists = messages.some((m) => m.id === message.id);
+        if (!exists) {
+          return [...messages, message];
+        }
+        return messages;
+      });
+    }
+
+    if (socketMessage.from !== this.currentUser()?.username) {
+      this.moveUserToTopWithMessage(
+        socketMessage.from,
+        socketMessage.content,
+        new Date()
+      );
+    }
+  }
+
+  private moveUserToTopWithMessage(
+    fromUsername: string,
+    messageContent: string,
+    timestamp: Date
+  ) {
+    this.users.update((users) =>
+      users.map((user) => {
+        if (user.username === fromUsername) {
+          return {
+            ...user,
+            hasUnreadMessage: true,
+            lastMessageTime: timestamp,
+            lastMessage: messageContent,
+            unreadCount: (user.unreadCount || 0) + 1,
+            sortPriority: Date.now(),
+          };
+        }
+        return user;
+      })
+    );
+
+    this.applySearch();
+  }
+
   loadUsers(showLoading = true) {
     if (showLoading) this.loading.set(true);
     this.error.set('');
@@ -144,30 +195,24 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
             response.data
           );
 
-          // FIX: Strictly filter out current user - multiple checks
           const currentUsername = this.currentUser()?.username;
           const currentUserId = this.currentUser()?.id;
 
           const filteredUsers = usersWithStatus.filter((user) => {
-            // Filter by username
             if (user.username === currentUsername) return false;
-            // Filter by id if available
             if (user.id === currentUserId) return false;
-            // Filter by email if same
             if (user.email === this.currentUser()?.email) return false;
             return true;
           });
 
-          console.log('Current user:', currentUsername);
-          console.log('Total users from API:', response.data.length);
-          console.log('Filtered users (excluding self):', filteredUsers.length);
-
-          // Add notification properties
           const usersWithNotifications: UserWithNotification[] =
             filteredUsers.map((user) => ({
               ...user,
               hasUnreadMessage: false,
               lastMessageTime: undefined,
+              lastMessage: undefined,
+              unreadCount: 0,
+              sortPriority: 0,
             }));
 
           this.users.set(usersWithNotifications);
@@ -191,28 +236,27 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
     });
   }
 
-  // Highlight user when new message arrives
-  highlightUserWithNewMessage(fromUsername: string) {
-    this.users.update((users) =>
-      users.map((user) => {
-        if (user.username === fromUsername) {
-          return {
-            ...user,
-            hasUnreadMessage: true,
-            lastMessageTime: new Date(),
-          };
-        }
-        return user;
-      })
-    );
+  getSortedUsers(): UserWithNotification[] {
+    const users = this.filteredUsers();
 
-    // Update filtered users as well
-    this.applySearch();
+    return [...users].sort((a, b) => {
+      if (a.hasUnreadMessage && !b.hasUnreadMessage) return -1;
+      if (!a.hasUnreadMessage && b.hasUnreadMessage) return 1;
+
+      if (a.hasUnreadMessage && b.hasUnreadMessage) {
+        const timeA = a.lastMessageTime?.getTime() || 0;
+        const timeB = b.lastMessageTime?.getTime() || 0;
+        return timeB - timeA;
+      }
+
+      if (a.isOnline && !b.isOnline) return -1;
+      if (!a.isOnline && b.isOnline) return 1;
+
+      return a.name.localeCompare(b.name);
+    });
   }
 
-  // Clear notification when user opens chat
   startChat(user: UserWithNotification) {
-    // Clear notification for this user
     this.users.update((users) =>
       users.map((u) => {
         if (u.username === user.username) {
@@ -220,6 +264,9 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
             ...u,
             hasUnreadMessage: false,
             lastMessageTime: undefined,
+            lastMessage: undefined,
+            unreadCount: 0,
+            sortPriority: 0,
           };
         }
         return u;
@@ -228,7 +275,7 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
 
     this.selectedUser.set(user);
     this.loadMessages();
-    this.applySearch(); // Refresh to remove highlight
+    this.applySearch();
   }
 
   loadMessages() {
@@ -272,6 +319,20 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
 
     this.sendingMessage.set(true);
 
+    const tempId = `temp-${Date.now()}`;
+    const optimisticMessage: Message = {
+      id: tempId,
+      from: this.currentUser()?.username || '',
+      to: user.username,
+      content: content,
+      timestamp: new Date(),
+      status: 'sent',
+      senderName: this.currentUser()?.name || 'You',
+    };
+
+    this.messages.update((messages) => [...messages, optimisticMessage]);
+    this.newMessage.set('');
+
     const messageData = {
       from_username: this.currentUser()?.username,
       to: user.username,
@@ -282,31 +343,29 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.messageService.sendMessage(messageData).subscribe({
       next: (response) => {
         if (response.success) {
-          const newMsg: Message = {
-            id: response.data.message_id || Date.now().toString(),
-            from: this.currentUser()?.username || '',
-            to: user.username,
-            content: content,
-            timestamp: new Date(),
-            status: 'sent',
-            senderName: this.currentUser()?.name || 'You',
-          };
-
-          this.messages.update((messages) => [...messages, newMsg]);
-          this.newMessage.set('');
-
-          setTimeout(() => {
-            this.messages.update((messages) =>
-              messages.map((msg) =>
-                msg.id === newMsg.id ? { ...msg, status: 'delivered' } : msg
-              )
-            );
-          }, 1000);
+          this.messages.update((messages) =>
+            messages.map((msg) =>
+              msg.id === tempId
+                ? {
+                    ...msg,
+                    id: response.data.message_id || tempId,
+                    status: 'delivered',
+                  }
+                : msg
+            )
+          );
+        } else {
+          this.messages.update((messages) =>
+            messages.filter((msg) => msg.id !== tempId)
+          );
         }
         this.sendingMessage.set(false);
       },
       error: (error) => {
         console.error('Send message error:', error);
+        this.messages.update((messages) =>
+          messages.filter((msg) => msg.id !== tempId)
+        );
         this.sendingMessage.set(false);
       },
     });
@@ -331,6 +390,28 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
       );
       this.filteredUsers.set(filtered);
     }
+  }
+
+  isRecentMessage(timestamp: Date): boolean {
+    const now = new Date();
+    const diffMs = now.getTime() - timestamp.getTime();
+    return diffMs < 10000;
+  }
+
+  truncateMessage(message: string): string {
+    return message.length > 30 ? message.substring(0, 30) + '...' : message;
+  }
+
+  formatLastMessageTime(timestamp: Date): string {
+    const now = new Date();
+    const diffMs = now.getTime() - timestamp.getTime();
+    const diffMinutes = Math.floor(diffMs / (1000 * 60));
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60));
+
+    if (diffMinutes < 1) return 'now';
+    if (diffMinutes < 60) return `${diffMinutes}m`;
+    if (diffHours < 24) return `${diffHours}h`;
+    return timestamp.toLocaleDateString();
   }
 
   getInitials(name: string): string {
@@ -416,7 +497,14 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.messages.set([]);
   }
 
+  closeChatMobile() {
+    this.selectedUser.set(null);
+    this.messages.set([]);
+  }
+
   logout() {
-    this.authService.logout();
+    if (confirm('Are you sure you want to logout?')) {
+      this.authService.logout();
+    }
   }
 }
