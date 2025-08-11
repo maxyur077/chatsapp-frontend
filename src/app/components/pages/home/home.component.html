@@ -4,7 +4,7 @@
     class="sidebar-panel w-full md:w-80 bg-white border-r border-gray-200 flex flex-col"
     [class.hidden]="selectedUser() && isMobileView()"
   >
-    <!-- Header -->
+    <!-- Header with Socket Status Indicator -->
     <div class="bg-gray-50 px-4 py-3 border-b border-gray-200">
       <div class="flex items-center justify-between">
         <div class="flex items-center space-x-3">
@@ -16,9 +16,21 @@
           >
             {{ getInitials(currentUser()?.name || "User") }}
           </div>
-          <span class="font-medium text-gray-900 text-sm md:text-base">{{
-            currentUser()?.name || "User"
-          }}</span>
+          <div class="flex-1">
+            <span class="font-medium text-gray-900 text-sm md:text-base">{{
+              currentUser()?.name || "User"
+            }}</span>
+            <!-- Socket Connection Status -->
+            <div class="flex items-center space-x-1">
+              <div
+                class="w-2 h-2 rounded-full"
+                [class]="socketConnected() ? 'bg-green-500' : 'bg-red-500'"
+              ></div>
+              <span class="text-xs text-gray-500">
+                {{ socketConnected() ? "Connected" : "Disconnected" }}
+              </span>
+            </div>
+          </div>
         </div>
 
         <div class="flex items-center space-x-1 md:space-x-2">
@@ -130,7 +142,6 @@
         <p class="text-sm md:text-base">No contacts found</p>
       </div>
 
-      <!-- Users List with WhatsApp-like ordering and highlighting -->
       <div *ngIf="!loading() && !error() && filteredUsers().length > 0">
         <div
           *ngFor="let user of getSortedUsers()"
@@ -138,15 +149,8 @@
           [class.border-l-4]="user.hasUnreadMessage"
           [class.border-l-green-500]="user.hasUnreadMessage"
           [class.shadow-md]="user.hasUnreadMessage"
-          [class.hover:bg-gray-50]="
-            !user.hasUnreadMessage || selectedUser()?.id === user.id
-          "
-          [class.hover:bg-blue-100]="
-            user.hasUnreadMessage && selectedUser()?.id !== user.id
-          "
           (click)="startChat(user)"
         >
-          <!-- Avatar with enhanced notification -->
           <div class="relative flex-shrink-0">
             <div
               class="w-10 h-10 md:w-12 md:h-12 rounded-full flex items-center justify-center text-white font-semibold transition-all duration-300 text-sm md:text-base"
@@ -222,7 +226,7 @@
                 </span>
               </p>
 
-              <!-- Unread count badge (alternative display) -->
+              <!-- Unread count badge -->
               <div
                 *ngIf="
                   user.hasUnreadMessage &&
@@ -262,6 +266,20 @@
         <p class="text-gray-500 max-w-md">
           Select a contact to start messaging
         </p>
+        <!-- Socket status indicator -->
+        <div class="mt-4 flex items-center justify-center space-x-2">
+          <div
+            class="w-3 h-3 rounded-full"
+            [class]="socketConnected() ? 'bg-green-500' : 'bg-red-500'"
+          ></div>
+          <span class="text-sm text-gray-500">
+            {{
+              socketConnected()
+                ? "Real-time messaging active"
+                : "Using fallback mode"
+            }}
+          </span>
+        </div>
       </div>
     </div>
 
@@ -306,7 +324,6 @@
           ></div>
         </div>
 
-        <!-- User Info -->
         <div class="flex-1">
           <h3 class="font-medium text-gray-900 text-sm md:text-base">
             {{ selectedUser()!.name }}
@@ -316,9 +333,17 @@
           </p>
         </div>
 
-        <!-- Actions -->
         <div class="flex items-center space-x-2">
-          <!-- Desktop close button -->
+          <div class="flex items-center space-x-1">
+            <div
+              class="w-2 h-2 rounded-full"
+              [class]="socketConnected() ? 'bg-green-500' : 'bg-yellow-500'"
+            ></div>
+            <span class="text-xs text-gray-500 hidden md:inline">
+              {{ socketConnected() ? "Live" : "API" }}
+            </span>
+          </div>
+
           <button
             *ngIf="!isMobileView()"
             (click)="closeChat()"
@@ -339,7 +364,6 @@
             </svg>
           </button>
 
-          <!-- Mobile menu button -->
           <button
             *ngIf="isMobileView()"
             class="p-2 text-gray-500 hover:text-gray-700 hover:bg-gray-200 rounded-full"
@@ -361,12 +385,17 @@
         </div>
       </div>
 
-      <!-- Messages Area -->
       <div
         #messagesContainer
         class="flex-1 overflow-y-auto p-3 md:p-4 space-y-3 md:space-y-4 bg-gray-50"
         style="height: calc(100vh - 120px); max-height: calc(100vh - 120px)"
       >
+        <div *ngIf="loadingMessages()" class="flex justify-center">
+          <div
+            class="animate-spin rounded-full h-6 w-6 md:h-8 md:w-8 border-b-2 border-green-500"
+          ></div>
+        </div>
+
         <div
           *ngIf="!loadingMessages() && messages().length === 0"
           class="flex justify-center items-center h-full"
@@ -378,7 +407,6 @@
           </div>
         </div>
 
-        <!-- Messages -->
         <div
           *ngFor="let message of messages()"
           [class]="
@@ -396,7 +424,6 @@
           >
             <p class="text-sm md:text-base">{{ message.content }}</p>
 
-            <!-- Time display -->
             <div class="flex items-center justify-end mt-1">
               <span
                 [class]="
@@ -407,12 +434,17 @@
               >
                 {{ formatMessageTime(message.timestamp) }}
               </span>
+              <span
+                *ngIf="message.from === currentUser()?.username"
+                class="ml-1 text-xs text-green-100"
+              >
+                {{ message.status === "delivered" ? "✓✓" : "✓" }}
+              </span>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- Message Input -->
       <div
         class="border-t border-gray-200 bg-white px-3 md:px-4 py-3 flex-shrink-0"
       >
@@ -426,12 +458,17 @@
               [disabled]="sendingMessage()"
               class="w-full px-3 md:px-4 py-2 bg-gray-100 border-0 rounded-full focus:outline-none focus:bg-white focus:ring-1 focus:ring-green-500 disabled:opacity-50 text-sm md:text-base"
             />
+            <!-- Typing indicator space -->
+            <div class="absolute -top-6 left-4 text-xs text-gray-500">
+              <!-- You can add typing indicators here later -->
+            </div>
           </div>
 
           <button
             (click)="sendMessage()"
             [disabled]="!newMessage().trim() || sendingMessage()"
-            class="p-2 bg-green-500 text-white rounded-full hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed"
+            class="p-2 bg-green-500 text-white rounded-full hover:bg-green-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all duration-200"
+            [class.animate-pulse]="sendingMessage()"
           >
             <svg
               *ngIf="!sendingMessage()"

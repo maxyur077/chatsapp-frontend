@@ -1,91 +1,141 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable } from '@angular/core';
 import { io, Socket } from 'socket.io-client';
-import { BehaviorSubject, Observable } from 'rxjs';
+import { Observable, BehaviorSubject } from 'rxjs';
 import { environment } from '../../../environments/environment';
-import { AuthService } from '../auth/auth.service';
-
-interface SocketMessage {
-  id: string;
-  from: string;
-  to: string;
-  content: string;
-  timestamp: Date;
-  status: string;
-  senderName: string;
-}
 
 @Injectable({
   providedIn: 'root',
 })
 export class SocketService {
-  private authService = inject(AuthService);
-  private socket: Socket | null = null;
-  private messagesSubject = new BehaviorSubject<SocketMessage[]>([]);
-  public messages$ = this.messagesSubject.asObservable();
-  private isConnected = false;
+  private socket!: Socket;
+  private readonly uri = environment.socketUrl;
+  private connectedSubject = new BehaviorSubject<boolean>(false);
+  private onlineUsersSubject = new BehaviorSubject<string[]>([]);
 
   connect() {
-    if (this.socket && this.isConnected) {
-      console.log('Socket already connected');
-      return;
+    if (this.socket) {
+      this.socket.disconnect();
     }
 
-    this.socket = io(environment.apiUrl, {
-      forceNew: true,
+    this.socket = io(this.uri, {
+      transports: ['websocket', 'polling'],
+      autoConnect: true,
       reconnection: true,
-      timeout: 60000,
-      transports: ['websocket'],
+      reconnectionAttempts: 10,
+      reconnectionDelay: 2000,
+      timeout: 10000,
+      forceNew: true,
     });
 
     this.socket.on('connect', () => {
-      console.log('✅ Connected to WebSocket server:', this.socket?.id);
-      this.isConnected = true;
-
-      const currentUser = this.authService.getCurrentUser();
-      if (currentUser) {
-        this.socket?.emit('join-user', currentUser.username);
-        console.log('✅ Joined room:', currentUser.username);
-      }
+      this.connectedSubject.next(true);
     });
 
-    this.socket.on('new-message', (message: SocketMessage) => {
-      console.log('📨 Received new message:', message);
-
-      const processedMessage = {
-        ...message,
-        content:
-          typeof message.content === 'string'
-            ? message.content
-            : JSON.stringify(message.content),
-        timestamp: new Date(message.timestamp),
-      };
-
-      this.messagesSubject.next([processedMessage]);
+    this.socket.on('connect_error', () => {
+      this.connectedSubject.next(false);
     });
 
     this.socket.on('disconnect', () => {
-      console.log('❌ Disconnected from WebSocket server');
-      this.isConnected = false;
+      this.connectedSubject.next(false);
     });
 
-    this.socket.on('connect_error', (error) => {
-      console.error('❌ Socket connection error:', error);
+    this.socket.on('online-users', (users: string[]) => {
+      this.onlineUsersSubject.next(users);
     });
+
+    this.socket.on('user-online', (data: any) => {
+      if (data.onlineUsers) {
+        this.onlineUsersSubject.next(data.onlineUsers);
+      }
+    });
+
+    this.socket.on('user-offline', (data: any) => {
+      if (data.onlineUsers) {
+        this.onlineUsersSubject.next(data.onlineUsers);
+      }
+    });
+  }
+
+  joinUser(username: string) {
+    if (this.socket?.connected) {
+      this.socket.emit('join-user', username);
+    }
+  }
+
+  sendMessage(messageData: any) {
+    if (this.socket?.connected) {
+      this.socket.emit('send-message', messageData);
+    }
+  }
+
+  getConnectionStatus(): Observable<boolean> {
+    return this.connectedSubject.asObservable();
+  }
+
+  getOnlineUsers(): Observable<string[]> {
+    return this.onlineUsersSubject.asObservable();
+  }
+
+  getNewMessages(): Observable<any> {
+    return new Observable((observer) => {
+      if (!this.socket) {
+        observer.error('Socket not initialized');
+        return;
+      }
+
+      this.socket.on('newMessage', (data) => {
+        observer.next([data]);
+      });
+
+      this.socket.on('message', (data) => {
+        observer.next([data]);
+      });
+
+      return () => {
+        if (this.socket) {
+          this.socket.off('newMessage');
+          this.socket.off('message');
+        }
+      };
+    });
+  }
+
+  isSocketConnected(): boolean {
+    return this.socket?.connected || false;
   }
 
   disconnect() {
     if (this.socket) {
+      this.socket.removeAllListeners();
       this.socket.disconnect();
-      this.socket = null;
-      this.isConnected = false;
     }
+    this.connectedSubject.next(false);
   }
 
-  getNewMessages(): Observable<SocketMessage[]> {
-    return this.messages$;
-  }
+  getSocketDebugInfo() {
+    if (!this.socket) {
+      return {
+        exists: false,
+        connected: false,
+        id: null,
+        transport: null,
+      };
+    }
 
-  clearMessages() {
-    this.messagesSubject.next([]);
+    let transport = 'unknown';
+    try {
+      if (this.socket.io?.engine?.transport) {
+        transport = this.socket.io.engine.transport.name || 'unknown';
+      }
+    } catch {
+      transport = 'unknown';
+    }
+
+    return {
+      exists: true,
+      connected: this.socket.connected,
+      id: this.socket.id,
+      transport: transport,
+    };
   }
 }
