@@ -6,6 +6,14 @@ A modern, real-time chat application built with Angular 20, featuring WhatsApp-l
 ![TypeScript](https://img.shields.io/badge/TypeScript-Latest-blue?style=flat-square&logo=typescript)
 ![Socket.IO](https://img.shields.io/badge/Socket.IO-Client-black?style=flat-square&logo=socket.io)
 ![TailwindCSS](https://img.shields.io/badge/TailwindCSS-Latest-38B2AC?style=flat-square&logo=tailwind-css)
+##Demo
+
+https://github.com/user-attachments/assets/7a1fd405-7ad4-46c4-a079-66f4fe6d5e2a
+
+
+
+#Live Project
+https://chatsapp.osc-fr1.scalingo.io/
 
 ## ✨ Features
 
