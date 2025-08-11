@@ -1,7 +1,7 @@
 import { Injectable, inject, PLATFORM_ID } from '@angular/core';
 import { isPlatformBrowser } from '@angular/common';
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { BehaviorSubject, Observable, throwError } from 'rxjs';
+import { BehaviorSubject, Observable } from 'rxjs';
 import { Router } from '@angular/router';
 import { environment } from '../../../environments/environment';
 import { User } from '../../models/user';
@@ -18,6 +18,7 @@ export interface AuthResponse {
     token: string;
     createdAt?: Date;
     loginAt?: Date;
+    user?: any; // Backend might wrap user data
   };
 }
 
@@ -33,8 +34,8 @@ export class AuthService {
   private currentUserSubject = new BehaviorSubject<User | null>(null);
   public currentUser$ = this.currentUserSubject.asObservable();
 
-  private tokenKey = 'authToken';
-  private userKey = 'currentUser';
+  private tokenKey = 'token';
+  private userKey = 'user';
 
   constructor() {
     if (this.isBrowser) {
@@ -49,7 +50,12 @@ export class AuthService {
 
       if (storedUser && token) {
         const user = JSON.parse(storedUser);
-        this.currentUserSubject.next(user);
+        // Validate required user properties
+        if (user.username && user.name && user.email) {
+          this.currentUserSubject.next(user);
+        } else {
+          this.clearStorage();
+        }
       }
     } catch (error) {
       console.error('Error loading user from storage:', error);
@@ -71,19 +77,12 @@ export class AuthService {
     phone: string;
     password: string;
   }): Observable<AuthResponse> {
-    console.log(
-      environment.apiUrl,
-      'https://chatsapp-backend-hom7.onrender.com/api'
-    );
     return new Observable((observer) => {
       this.http
-        .post<AuthResponse>(
-          `https://chatsapp-backend-hom7.onrender.com/api/users/register`,
-          userData
-        )
+        .post<AuthResponse>(`${environment.apiUrl}/users/register`, userData)
         .subscribe({
           next: (response) => {
-            if (response.success) {
+            if (response.success && response.data) {
               this.setAuthData(response.data);
             }
             observer.next(response);
@@ -105,7 +104,7 @@ export class AuthService {
         .post<AuthResponse>(`${environment.apiUrl}/users/login`, credentials)
         .subscribe({
           next: (response) => {
-            if (response.success) {
+            if (response.success && response.data) {
               this.setAuthData(response.data);
             }
             observer.next(response);
@@ -118,14 +117,44 @@ export class AuthService {
     });
   }
 
+  // FIXED: Proper user object creation that matches User interface
   private setAuthData(userData: any): void {
     if (this.isBrowser) {
       try {
+        // Handle case where user data might be nested
+        const userInfo = userData.user || userData;
+
+        // Validate required fields
+        if (!userData.token || !userInfo.username || !userInfo.name) {
+          throw new Error('Invalid user data received');
+        }
+
+        // Store token
         localStorage.setItem(this.tokenKey, userData.token);
-        localStorage.setItem(this.userKey, JSON.stringify(userData));
-        this.currentUserSubject.next(userData);
+
+        // Create user object that matches User interface exactly
+        const user: User = {
+          _id: userInfo._id || userInfo.id || userInfo.username,
+          id: userInfo.id || userInfo._id,
+          username: userInfo.username,
+          name: userInfo.name,
+          email: userInfo.email,
+          phone: userInfo.phone,
+          createdAt: userInfo.createdAt
+            ? new Date(userInfo.createdAt)
+            : undefined,
+          loginAt: userInfo.loginAt ? new Date(userInfo.loginAt) : new Date(),
+          updatedAt: userInfo.updatedAt
+            ? new Date(userInfo.updatedAt)
+            : new Date(),
+        };
+
+        localStorage.setItem(this.userKey, JSON.stringify(user));
+        this.currentUserSubject.next(user);
       } catch (error) {
         console.error('Error storing auth data:', error);
+        this.clearStorage();
+        throw error;
       }
     }
   }
@@ -149,21 +178,46 @@ export class AuthService {
   }
 
   isLoggedIn(): boolean {
-    return !!this.currentUserSubject.value && !!this.getToken();
+    if (!this.isBrowser) return false;
+
+    const token = this.getToken();
+    const user = this.currentUserSubject.value;
+
+    return !!(token && user && user.username && user.name);
   }
 
   getCurrentUser(): User | null {
     return this.currentUserSubject.value;
   }
 
+  refreshUserData(): void {
+    if (this.isBrowser) {
+      this.loadUserFromStorage();
+    }
+  }
+
+  isTokenValid(): boolean {
+    const token = this.getToken();
+    if (!token) return false;
+
+    try {
+      const parts = token.split('.');
+      return parts.length === 3;
+    } catch {
+      return false;
+    }
+  }
+
   private handleError(error: HttpErrorResponse): string {
     if (error.error instanceof ErrorEvent) {
-      return `Error: ${error.error.message}`;
+      return `Network error: ${error.error.message}`;
     } else {
       if (error.error && error.error.message) {
         return error.error.message;
       }
-      return `Error Code: ${error.status}\nMessage: ${error.message}`;
+      return `Server error: ${error.status} - ${
+        error.message || 'Unknown error'
+      }`;
     }
   }
 }

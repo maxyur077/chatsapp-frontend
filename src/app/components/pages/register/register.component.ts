@@ -174,7 +174,8 @@ export class RegisterComponent {
   // Check if error should be shown (only if touched or form submitted)
   shouldShowError(field: string): boolean {
     return (
-      ((this.touched as any)[field] || this.formSubmitted()) &&
+      (this.touched as any)[field] &&
+      this.formSubmitted() &&
       !(this.validation as any)[field].valid &&
       (this.validation as any)[field].message
     );

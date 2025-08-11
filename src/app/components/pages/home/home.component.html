@@ -434,12 +434,6 @@
               >
                 {{ formatMessageTime(message.timestamp) }}
               </span>
-              <span
-                *ngIf="message.from === currentUser()?.username"
-                class="ml-1 text-xs text-green-100"
-              >
-                {{ message.status === "delivered" ? "✓✓" : "✓" }}
-              </span>
             </div>
           </div>
         </div>

@@ -13,11 +13,21 @@ export class SocketService {
   private onlineUsersSubject = new BehaviorSubject<string[]>([]);
 
   connect() {
+    const token = localStorage.getItem('token');
+
+    if (!token) {
+      this.connectedSubject.next(false);
+      return;
+    }
+
     if (this.socket) {
       this.socket.disconnect();
     }
 
     this.socket = io(this.uri, {
+      auth: {
+        token: token,
+      },
       transports: ['websocket', 'polling'],
       autoConnect: true,
       reconnection: true,
@@ -31,12 +41,25 @@ export class SocketService {
       this.connectedSubject.next(true);
     });
 
-    this.socket.on('connect_error', () => {
+    this.socket.on('connect_error', (error: any) => {
       this.connectedSubject.next(false);
+
+      if (
+        error.message === 'Authentication required' ||
+        error.message === 'Invalid authentication token'
+      ) {
+        this.handleAuthenticationError();
+      }
     });
 
     this.socket.on('disconnect', () => {
       this.connectedSubject.next(false);
+    });
+
+    this.socket.on('error', (error: any) => {
+      if (error.message?.includes('Unauthorized')) {
+        this.handleAuthenticationError();
+      }
     });
 
     this.socket.on('online-users', (users: string[]) => {
@@ -54,6 +77,11 @@ export class SocketService {
         this.onlineUsersSubject.next(data.onlineUsers);
       }
     });
+  }
+
+  private handleAuthenticationError() {
+    localStorage.removeItem('token');
+    window.location.href = '/login';
   }
 
   joinUser(username: string) {
@@ -104,14 +132,7 @@ export class SocketService {
     return this.socket?.connected || false;
   }
 
-  disconnect() {
-    if (this.socket) {
-      this.socket.removeAllListeners();
-      this.socket.disconnect();
-    }
-    this.connectedSubject.next(false);
-  }
-
+  // ADDED: The missing getSocketDebugInfo method
   getSocketDebugInfo() {
     if (!this.socket) {
       return {
@@ -137,5 +158,13 @@ export class SocketService {
       id: this.socket.id,
       transport: transport,
     };
+  }
+
+  disconnect() {
+    if (this.socket) {
+      this.socket.removeAllListeners();
+      this.socket.disconnect();
+    }
+    this.connectedSubject.next(false);
   }
 }

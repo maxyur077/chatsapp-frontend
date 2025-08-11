@@ -82,34 +82,41 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
   }
 
   ngOnInit() {
-    this.currentUser.set(this.authService.getCurrentUser());
+    try {
+      const currentUser = this.authService.getCurrentUser();
+      this.currentUser.set(currentUser);
 
-    if (!this.authService.isLoggedIn()) {
-      this.router.navigate(['/login']);
-      return;
-    }
-
-    this.checkMobileView();
-    this.loadUsers();
-
-    setTimeout(() => {
-      this.initializeSocket();
-    }, 2000);
-
-    setInterval(() => {
-      this.updateSocketDebugInfo();
-    }, 10000);
-
-    this.refreshSubscription = interval(70000).subscribe(() => {
-      this.updateOnlineStatus();
-      this.loadUsers(false);
-
-      if (this.selectedUser() && !this.socketConnected()) {
-        this.loadMessages();
+      if (!this.authService.isLoggedIn() || !currentUser) {
+        this.router.navigate(['/login']);
+        return;
       }
-    });
 
-    this.initializeOnlineStatusTracking();
+      if (!currentUser.username || !currentUser.name) {
+        this.authService.logout();
+        return;
+      }
+
+      if (!this.authService.isTokenValid()) {
+        this.authService.logout();
+        return;
+      }
+
+      this.checkMobileView();
+
+      this.loadUsersWithRetry();
+
+      setTimeout(() => {
+        if (this.authService.isLoggedIn() && this.currentUser()?.username) {
+          this.initializeSocket();
+        }
+      }, 1000);
+
+      this.setupPeriodicRefresh();
+      this.initializeOnlineStatusTracking();
+    } catch (error) {
+      console.error('❌ Home component initialization error:', error);
+      this.authService.logout();
+    }
   }
 
   ngOnDestroy() {
@@ -118,16 +125,55 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
     this.onlineStatusSubscription?.unsubscribe();
     this.connectionStatusSubscription?.unsubscribe();
 
-    this.socketService.disconnect();
+    try {
+      this.socketService.disconnect();
+    } catch (error) {
+      console.error('❌ Socket disconnect error:', error);
+    }
   }
 
   ngAfterViewChecked() {
     this.scrollToBottom();
   }
 
+  private loadUsersWithRetry(retries = 3) {
+    this.loadUsers();
+
+    setTimeout(() => {
+      if (this.error() && retries > 0 && this.authService.isLoggedIn()) {
+        this.loadUsersWithRetry(retries - 1);
+      }
+    }, 2000);
+  }
+
+  private setupPeriodicRefresh() {
+    this.refreshSubscription = interval(70000).subscribe(() => {
+      if (this.authService.isLoggedIn()) {
+        this.updateOnlineStatus();
+        this.loadUsers(false);
+
+        if (this.selectedUser() && !this.socketConnected()) {
+          this.loadMessages();
+        }
+      } else {
+        this.refreshSubscription?.unsubscribe();
+        this.authService.logout();
+      }
+    });
+  }
+
   private updateSocketDebugInfo() {
-    const debugInfo = this.socketService.getSocketDebugInfo();
-    this.socketDebugInfo.set(debugInfo);
+    try {
+      const debugInfo = this.socketService.getSocketDebugInfo();
+      this.socketDebugInfo.set(debugInfo);
+    } catch (error) {
+      this.socketDebugInfo.set({
+        exists: false,
+        connected: false,
+        id: null,
+        transport: null,
+      });
+    }
   }
 
   private checkMobileView() {
@@ -136,49 +182,83 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
   }
 
   private initializeSocket() {
-    this.socketService.disconnect();
+    try {
+      this.socketService.disconnect();
 
-    setTimeout(() => {
-      this.socketService.connect();
+      setTimeout(() => {
+        this.socketService.connect();
 
-      this.connectionStatusSubscription = this.socketService
-        .getConnectionStatus()
-        .subscribe({
-          next: (isConnected: boolean) => {
-            this.socketConnected.set(isConnected);
-            this.updateSocketDebugInfo();
+        this.connectionStatusSubscription = this.socketService
+          .getConnectionStatus()
+          .subscribe({
+            next: (isConnected: boolean) => {
+              this.socketConnected.set(isConnected);
+              this.updateSocketDebugInfo();
 
-            if (isConnected && this.currentUser()?.username) {
+              if (isConnected && this.currentUser()?.username) {
+                setTimeout(() => {
+                  this.socketService.joinUser(this.currentUser().username);
+                }, 2000);
+              }
+            },
+            error: (error: any) => {
+              this.socketConnected.set(false);
+              if (
+                error.message?.includes('Authentication') ||
+                error.message?.includes('Unauthorized')
+              ) {
+                this.authService.logout();
+              }
+            },
+          });
+
+        this.socketSubscription = this.socketService
+          .getNewMessages()
+          .subscribe({
+            next: (newMessages: any) => {
+              this.socketConnected.set(true);
+
+              if (Array.isArray(newMessages) && newMessages.length > 0) {
+                newMessages.forEach((socketMessage: any) => {
+                  this.handleIncomingMessage(socketMessage);
+                });
+              } else if (newMessages && !Array.isArray(newMessages)) {
+                this.handleIncomingMessage(newMessages);
+              }
+            },
+            error: (error: any) => {
+              console.error('❌ Socket message error:', error);
+              this.socketConnected.set(false);
+
+              if (
+                error.message?.includes('Authentication') ||
+                error.message?.includes('Unauthorized')
+              ) {
+                this.authService.logout();
+                return;
+              }
+
               setTimeout(() => {
-                this.socketService.joinUser(this.currentUser().username);
-              }, 2000);
-            }
-          },
-        });
+                if (this.authService.isLoggedIn()) {
+                  this.initializeSocket();
+                }
+              }, 5000);
+            },
+            complete: () => {
+              this.socketConnected.set(false);
+            },
+          });
+      }, 1000);
+    } catch (error) {
+      console.error('❌ Socket initialization error:', error);
+      this.socketConnected.set(false);
 
-      this.socketSubscription = this.socketService.getNewMessages().subscribe({
-        next: (newMessages: any) => {
-          this.socketConnected.set(true);
-
-          if (Array.isArray(newMessages) && newMessages.length > 0) {
-            newMessages.forEach((socketMessage: any) => {
-              this.handleIncomingMessage(socketMessage);
-            });
-          } else if (newMessages && !Array.isArray(newMessages)) {
-            this.handleIncomingMessage(newMessages);
-          }
-        },
-        error: () => {
-          this.socketConnected.set(false);
-          setTimeout(() => {
-            this.initializeSocket();
-          }, 5000);
-        },
-        complete: () => {
-          this.socketConnected.set(false);
-        },
-      });
-    }, 1000);
+      setTimeout(() => {
+        if (this.authService.isLoggedIn()) {
+          this.initializeSocket();
+        }
+      }, 5000);
+    }
   }
 
   private handleIncomingMessage(socketMessage: any) {
@@ -295,7 +375,7 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
           this.updateUsersOnlineStatus(onlineUsers);
         },
         error: () => {
-          this.simulateOnlineStatusChanges();
+          this.fallbackOnlineStatusCheck();
         },
       });
   }
@@ -310,8 +390,35 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
           : user.lastSeen,
       }))
     );
-
     this.applySearch();
+  }
+
+  private fallbackOnlineStatusCheck() {
+    setInterval(() => {
+      if (!this.authService.isLoggedIn()) {
+        return;
+      }
+
+      this.userService.getOnlineUsers().subscribe({
+        next: (response: any) => {
+          if (response.success) {
+            this.updateUsersOnlineStatus(response.data.onlineUsers);
+          }
+        },
+        error: (error: any) => {
+          if (
+            error?.status === 401 &&
+            (error?.error?.message?.includes('Token') ||
+              error?.error?.message?.includes('Unauthorized'))
+          ) {
+            this.authService.logout();
+            return;
+          }
+
+          this.simulateOnlineStatusChanges();
+        },
+      });
+    }, 30000);
   }
 
   private simulateOnlineStatusChanges() {
@@ -334,6 +441,11 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
   loadUsers(showLoading = true) {
     if (showLoading) this.loading.set(true);
     this.error.set('');
+
+    if (!this.authService.isLoggedIn()) {
+      this.authService.logout();
+      return;
+    }
 
     this.userService.getAllUsers().subscribe({
       next: (response) => {
@@ -374,7 +486,18 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
         this.loading.set(false);
       },
       error: (error: any) => {
-        if (error.includes('authorization denied') || error.includes('Token')) {
+        console.error('❌ Load users error:', error);
+
+        const errorStatus = error?.status;
+        const errorMessage = error?.message || error?.error?.message || '';
+
+        if (
+          errorStatus === 401 &&
+          (errorMessage.includes('Token') ||
+            errorMessage.includes('authorization') ||
+            errorMessage.includes('Unauthorized') ||
+            errorMessage.includes('expired'))
+        ) {
           this.authService.logout();
           return;
         }
@@ -406,6 +529,31 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
   }
 
   startChat(user: UserWithNotification) {
+    const currentUser = this.authService.getCurrentUser();
+    const token = this.authService.getToken();
+
+    if (!this.authService.isLoggedIn() || !currentUser || !token) {
+      this.authService.logout();
+      return;
+    }
+
+    if (!currentUser.username || !currentUser.name) {
+      console.error('❌ Invalid current user data in startChat');
+      this.authService.logout();
+      return;
+    }
+
+    if (!user.username || !user.name) {
+      console.error('❌ Invalid target user data in startChat');
+      this.error.set('Invalid user data. Please refresh and try again.');
+      return;
+    }
+
+    if (user.username === currentUser.username) {
+      this.error.set('Cannot start a conversation with yourself.');
+      return;
+    }
+
     this.users.update((users) =>
       users.map((u) => {
         if (u.username === user.username) {
@@ -423,13 +571,18 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
     );
 
     this.selectedUser.set(user);
-    this.loadMessages();
+    this.loadMessagesSecure();
     this.applySearch();
   }
 
-  loadMessages() {
+  private loadMessagesSecure() {
     const user = this.selectedUser();
     if (!user) return;
+
+    if (!this.authService.isLoggedIn()) {
+      this.authService.logout();
+      return;
+    }
 
     this.loadingMessages.set(true);
 
@@ -452,11 +605,34 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
         }
         this.loadingMessages.set(false);
       },
-      error: () => {
+      error: (error: any) => {
+        console.error('❌ Load messages error:', error);
+
+        const errorStatus = error?.status;
+        const errorMessage = error?.message || error?.error?.message || '';
+
+        if (errorStatus === 401 || errorStatus === 403) {
+          if (
+            errorMessage.includes('Token') ||
+            errorMessage.includes('Unauthorized') ||
+            errorMessage.includes('access')
+          ) {
+            this.authService.logout();
+            return;
+          }
+        }
+
         this.messages.set([]);
         this.loadingMessages.set(false);
+
+        this.error.set('Could not load conversation. Please try again.');
+        setTimeout(() => this.error.set(''), 5000);
       },
     });
+  }
+
+  loadMessages() {
+    this.loadMessagesSecure();
   }
 
   sendMessage() {
@@ -464,6 +640,12 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
     const user = this.selectedUser();
 
     if (!content || !user || this.sendingMessage()) return;
+
+    if (!this.authService.isLoggedIn()) {
+      console.log('❌ Not authenticated, cannot send message');
+      this.authService.logout();
+      return;
+    }
 
     this.sendingMessage.set(true);
 
@@ -520,7 +702,22 @@ export class HomeComponent implements OnInit, OnDestroy, AfterViewChecked {
         }
         this.sendingMessage.set(false);
       },
-      error: () => {
+      error: (error: any) => {
+        console.error('❌ Send message error:', error);
+
+        const errorStatus = error?.status;
+        const errorMessage = error?.message || error?.error?.message || '';
+
+        if (
+          errorStatus === 401 &&
+          (errorMessage.includes('Token') ||
+            errorMessage.includes('Unauthorized'))
+        ) {
+          console.log('🔒 Authentication failed in sendMessage, logging out');
+          this.authService.logout();
+          return;
+        }
+
         this.messages.update((messages) =>
           messages.filter((msg) => msg.id !== tempId)
         );

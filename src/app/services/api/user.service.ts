@@ -33,6 +33,10 @@ export class UserService {
     return this.http.get<UsersResponse>(`${environment.apiUrl}/users`);
   }
 
+  getOnlineUsers(): Observable<any> {
+    return this.http.get<any>(`${environment.apiUrl}/users/online`);
+  }
+
   getUserByUsername(username: string): Observable<any> {
     return this.http.get(`${environment.apiUrl}/users/${username}`);
   }
